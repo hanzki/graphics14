@@ -17,7 +17,10 @@
 #include <type_traits>
 
 using namespace FW;
-using namespace std;
+using std::vector;
+using std::array;
+using std::string;
+//using namespace std;
 
 // Anonymous namespace. This is a C++ way to define things which
 // do not need to be visible outside this file.
@@ -168,9 +171,10 @@ App::App(void)
 	shading_mode_changed_	(false),
 	camera_rotation_angle_	(0.0f),
 	translation_			(Vec3f(0.0f)),
-	scale_					(1.0f)
+	scale_					(1.0f),
+	rotation_				(0.0f)
 {
-	static_assert(is_standard_layout<Vertex>::value, "struct Vertex must be standard layout to use offsetof");
+	static_assert(std::is_standard_layout<Vertex>::value, "struct Vertex must be standard layout to use offsetof");
 	initRendering();
 	
 	common_ctrl_.showFPS(true);
@@ -257,6 +261,10 @@ bool App::handleEvent(const Window::Event& ev) {
 			scale_ *= 1.25;
 		else if (ev.key == FW_KEY_MINUS)
 			scale_ /= 1.25;
+		else if (ev.key == FW_KEY_ASTERISK)
+			rotation_ -= 0.05 * FW_PI;
+		else if (ev.key == FW_KEY_SLASH)
+			rotation_ += 0.05 * FW_PI;
 
 
 	}
@@ -418,8 +426,13 @@ void App::render() {
 	// Set the model space -> world space transform to translate the model according to user input.
 	Mat4f scaleMat = Mat4f::scale(Vec3f(scale_, 1.0f, 1.0f));
 	Mat4f translationMat = Mat4f::translate(translation_);
-	Mat4f rotation = 
-	Mat4f modelToWorld = scaleMat * translationMat;
+	Mat4f rotationMat;
+	Mat3f rotation = Mat3f::rotation(Vec3f(0, 1, 0), rotation_);
+	rotationMat.setCol(0, Vec4f(rotation.getCol(0), 0));
+	rotationMat.setCol(1, Vec4f(rotation.getCol(1), 0));
+	rotationMat.setCol(2, Vec4f(rotation.getCol(2), 0));
+	rotationMat.setCol(3, Vec4f(0, 0, 0, 1));
+	Mat4f modelToWorld = translationMat * rotationMat * scaleMat;
 	
 	// Draw the model with your model-to-world transformation.
 	glUniformMatrix4fv(gl_.model_to_world_uniform, 1, GL_FALSE, modelToWorld.getPtr());
@@ -447,7 +460,7 @@ vector<Vertex> App::loadObjFileModel(string filename) {
 	vector<array<unsigned, 6>> faces;
 
 	// Open input file stream for reading.
-	ifstream input(filename, ios::in);
+	std::ifstream input(filename, std::ios::in);
 
 	// Read the file line by line.
 	string line;
@@ -464,7 +477,7 @@ vector<Vertex> App::loadObjFileModel(string filename) {
 		string              s;
 
 		// Create a stream from the string to pick out one value at a time.
-		istringstream        iss(line);
+		std::istringstream        iss(line);
 
 		// Read the first token from the line into string 's'.
 		// It identifies the type of object (vertex or normal or ...)

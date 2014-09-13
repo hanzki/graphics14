@@ -66,6 +66,7 @@ private:
 	// Add a class member to store the current translation.
 	Vec3f				translation_;
 	float				scale_;
+	float				rotation_;
 
 	// EXTRA:
 	// For animation extra credit you can use the framework's Timer class.
