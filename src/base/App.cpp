@@ -343,6 +343,7 @@ void App::initRendering() {
 		uniform mat4 uModelToWorld;
 		uniform mat4 uWorldToClip;
 		uniform float uShading;
+		uniform mat3 rotation;
 		
 		const vec3 distinctColors[6] = vec3[6](
 			vec3(0, 0, 1), vec3(0, 1, 0), vec3(0, 1, 1),
@@ -352,7 +353,7 @@ void App::initRendering() {
 		void main()
 		{
 			// EXTRA: oops, someone forgot to transform normals here...
-			float clampedCosine = clamp(dot(aNormal, directionToLight), 0.0, 1.0);
+			float clampedCosine = clamp(dot( normalize(rotation * aNormal), directionToLight), 0.0, 1.0);
 			vec3 litColor = vec3(clampedCosine);
 			vec3 generatedColor = distinctColors[gl_VertexID % 6];
 			// gl_Position is a built-in output variable that marks the final position
@@ -378,6 +379,7 @@ void App::initRendering() {
 	gl_.world_to_clip_uniform = glGetUniformLocation(gl_.shader_program, "uWorldToClip");
 	gl_.model_to_world_uniform = glGetUniformLocation(gl_.shader_program, "uModelToWorld");
 	gl_.shading_toggle_uniform = glGetUniformLocation(gl_.shader_program, "uShading");
+	gl_.rotation_uniform = glGetUniformLocation(gl_.shader_program, "rotation");
 }
 
 void App::render() {
@@ -435,6 +437,7 @@ void App::render() {
 	Mat4f modelToWorld = translationMat * rotationMat * scaleMat;
 	
 	// Draw the model with your model-to-world transformation.
+	glUniformMatrix3fv(gl_.rotation_uniform, 1, GL_FALSE, rotation.getPtr());
 	glUniformMatrix4fv(gl_.model_to_world_uniform, 1, GL_FALSE, modelToWorld.getPtr());
 	glBindVertexArray(gl_.dynamic_vao);
 	glDrawArrays(GL_TRIANGLES, 0, vertices_.size());
