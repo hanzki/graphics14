@@ -180,10 +180,14 @@ Quatf::Quatf(const Vec3f &axis, float angle){
 	z = axis.z * angsin;
 }
 Mat3f Quatf::rotation() const{
+	float ww = w*w, xx = x*x, yy = y*y, zz = z*z;
+	float wx = w*x, wy = w*y, wz = w*z;
+	float xy = x*y, xz = x*z;
+	float yz = y*z;
 	Mat3f mat;
-	mat.setRow(0, Vec3f(1 - 2 * y * y - 2 * z * z	, 2 * x * y - 2 * w * z		, 2 * x * z + 2 * w * y));
-	mat.setRow(1, Vec3f(2 * x * y + 2 * w * z		, 1 - 2 * x * x - 2 * z * z	, 2 * y * z + 2 * w * x));
-	mat.setRow(2, Vec3f(2 * x * z - 2 * w * y		, 2 * y * z - 2 * w * x		, 1 - 2 * x * x - 2 * y * y));
+	mat.setRow(0, Vec3f(ww + xx - yy - zz	, 2 * xy - 2 * wz	, 2 * xz + 2 * wy));
+	mat.setRow(1, Vec3f(2 * xy + 2 * wz		, ww - xx + yy - zz	, 2 * yz - 2 * wx));
+	mat.setRow(2, Vec3f(2 * xz - 2 * wy		, 2 * yz + 2 * wx	, ww - xx - yy + zz));
 	return mat;
 }
 Quatf& Quatf::normalize() {
@@ -298,27 +302,27 @@ bool App::handleEvent(const Window::Event& ev) {
 		else if (ev.key == FW_KEY_SLASH)
 			rotation_ += 0.05 * FW_PI;
 		else if (ev.key == FW_KEY_Q)
-			rotQ_ = Quatf(Vec3f(0, 0, 1), -0.05 * FW_PI) * rotQ_;
+			rotQ_ = rotQ_ * Quatf(Vec3f(0, 0, 1), -0.05 * FW_PI);
 		else if (ev.key == FW_KEY_E)
-			rotQ_ = Quatf(Vec3f(0, 0, 1), 0.05 * FW_PI) * rotQ_;
+			rotQ_ = rotQ_ * Quatf(Vec3f(0, 0, 1), 0.05 * FW_PI);
 		else if (ev.key == FW_KEY_W)
-			rotQ_ = Quatf(Vec3f(1, 0, 0), -0.05 * FW_PI) * rotQ_;
+			rotQ_ = rotQ_ * Quatf(Vec3f(1, 0, 0), -0.05 * FW_PI);
 		else if (ev.key == FW_KEY_S)
-			rotQ_ = Quatf(Vec3f(1, 0, 0), 0.05 * FW_PI) * rotQ_;
+			rotQ_ = rotQ_ * Quatf(Vec3f(1, 0, 0), 0.05 * FW_PI);
 		else if (ev.key == FW_KEY_A)
-			rotQ_ = Quatf(Vec3f(0, 1, 0), -0.05 * FW_PI) * rotQ_;
+			rotQ_ = rotQ_ * Quatf(Vec3f(0, 1, 0), -0.05 * FW_PI);
 		else if (ev.key == FW_KEY_D)
-			rotQ_ = Quatf(Vec3f(0, 1, 0), 0.05 * FW_PI) * rotQ_;
+			rotQ_ = rotQ_ * Quatf(Vec3f(0, 1, 0), 0.05 * FW_PI);
 		else if (ev.key == FW_KEY_P)
 			rotQ_.normalize();
 		else if (ev.key == FW_KEY_Y)
-			cameraPos_ = cameraPos_ + rotQ_.rotation().getCol(2) * 0.1f;
+			cameraPos_ = cameraPos_ + 0.1f * rotQ_.rotation().transposed() * Vec3f(0, 0, 1);
 		else if (ev.key == FW_KEY_H)
-			cameraPos_ = cameraPos_ + rotQ_.rotation().getCol(2) * -0.1f;
+			cameraPos_ = cameraPos_ - 0.1f * rotQ_.rotation().transposed() * Vec3f(0, 0, 1);
 		else if (ev.key == FW_KEY_J)
-			cameraPos_ = cameraPos_ + rotQ_.rotation().getCol(0) * -0.1f;
+			cameraPos_ = cameraPos_ - 0.1f * rotQ_.rotation().transposed() * Vec3f(1, 0, 0);
 		else if (ev.key == FW_KEY_G)
-			cameraPos_ = cameraPos_ + rotQ_.rotation().getCol(0) * 0.1f;
+			cameraPos_ = cameraPos_ + 0.1f * rotQ_.rotation().transposed() * Vec3f(1, 0, 0);
 
 	}
 	
@@ -393,10 +397,9 @@ void App::initRendering() {
 		
 		out vec4 vColor;
 		
-		uniform mat4 uModelToWorld;
-		uniform mat4 uWorldToClip;
 		uniform float uShading;
-		uniform mat3 rotation;
+		uniform mat4 mvp;
+		uniform mat3 normalMatrix;
 		
 		const vec3 distinctColors[6] = vec3[6](
 			vec3(0, 0, 1), vec3(0, 1, 0), vec3(0, 1, 1),
@@ -406,12 +409,12 @@ void App::initRendering() {
 		void main()
 		{
 			// EXTRA: oops, someone forgot to transform normals here...
-			float clampedCosine = clamp(dot( normalize(rotation * aNormal), directionToLight), 0.0, 1.0);
+			float clampedCosine = clamp(dot( normalize(normalMatrix * aNormal), directionToLight), 0.0, 1.0);
 			vec3 litColor = vec3(clampedCosine);
 			vec3 generatedColor = distinctColors[gl_VertexID % 6];
 			// gl_Position is a built-in output variable that marks the final position
 			// of the vertex in clip space. Vertex shaders must write in it.
-			gl_Position = uWorldToClip * uModelToWorld * aPosition;
+			gl_Position = mvp * aPosition;
 			vColor = vec4(mix(generatedColor, litColor, uShading), 1);
 		}
 		),
@@ -429,10 +432,12 @@ void App::initRendering() {
 
 	// Get the IDs of the shader program and its uniform input locations from OpenGL.
 	gl_.shader_program = shader_program->getHandle();
-	gl_.world_to_clip_uniform = glGetUniformLocation(gl_.shader_program, "uWorldToClip");
-	gl_.model_to_world_uniform = glGetUniformLocation(gl_.shader_program, "uModelToWorld");
+	//gl_.world_to_clip_uniform = glGetUniformLocation(gl_.shader_program, "uWorldToClip");
+	//gl_.model_to_world_uniform = glGetUniformLocation(gl_.shader_program, "uModelToWorld");
 	gl_.shading_toggle_uniform = glGetUniformLocation(gl_.shader_program, "uShading");
-	gl_.rotation_uniform = glGetUniformLocation(gl_.shader_program, "rotation");
+	//gl_.rotation_uniform = glGetUniformLocation(gl_.shader_program, "rotation");
+	gl_.mvp_uniform = glGetUniformLocation(gl_.shader_program, "mvp");
+	gl_.normal_matrix_uniform = glGetUniformLocation(gl_.shader_program, "normalMatrix");
 }
 
 void App::render() {
@@ -449,22 +454,24 @@ void App::render() {
 
 	// Our camera is aimed at origin, and orbits around origin at fixed distance.
 	static const float camera_distance = -2.1f;	
-	Mat4f C;
+	Mat4f M, V, P;
+	Mat4f MVP;
+	Mat3f normalMat;
 	Quatf rotationQuat(Vec3f(0, 1, 0), -camera_rotation_angle_);
 #if 0
 	Mat3f rot = Mat3f::rotation(Vec3f(0, 1, 0), -camera_rotation_angle_);
 #else
-	Mat3f rot = rotQ_.rotation();
+	Mat3f rot = rotQ_.normalize().rotation();
 #endif
-	C.setCol(0, Vec4f(rot.getCol(0), 0));
-	C.setCol(1, Vec4f(rot.getCol(1), 0));
-	C.setCol(2, Vec4f(rot.getCol(2), 0));
-	C.setCol(3, Vec4f(0, 0, 0, 1));
+	V.setCol(0, Vec4f(rot.getCol(0), 0));
+	V.setCol(1, Vec4f(rot.getCol(1), 0));
+	V.setCol(2, Vec4f(rot.getCol(2), 0));
+	V.setCol(3, Vec4f(0, 0, 0, 1));
 
-	C = C * Mat4f::translate(cameraPos_);
+	V = V * Mat4f::translate(cameraPos_);
 	
 	// Simple perspective.
-	Mat4f P = Mat4f::perspective(70, 0.1f, 4.0f);
+	P = Mat4f::perspective(70, 0.1f, 4.0f);
 	//static const float fnear = 0.1f, ffar = 4.0f;
 	//Mat4f P;
 	//P.setCol(0, Vec4f(1, 0, 0, 0));
@@ -472,16 +479,15 @@ void App::render() {
 	//P.setCol(2, Vec4f(0, 0, (ffar+fnear)/(ffar-fnear), 1));
 	//P.setCol(3, Vec4f(0, 0, -2*ffar*fnear/(ffar-fnear), 0));
 
-	Mat4f world_to_clip = P * C;
+	MVP = P * V * M;
 	
 	// Set active shader program.
 	glUseProgram(gl_.shader_program);
 	glUniform1f(gl_.shading_toggle_uniform, shading_toggle_ ? 1.0f : 0.0f);
-	glUniformMatrix4fv(gl_.world_to_clip_uniform, 1, GL_FALSE, world_to_clip.getPtr());
+	glUniformMatrix4fv(gl_.mvp_uniform, 1, GL_FALSE, MVP.getPtr());
+	glUniformMatrix3fv(gl_.normal_matrix_uniform, 1, GL_FALSE, normalMat.getPtr());
 
 	// Draw the reference plane. It is already in world coordinates.
-	auto identity = Mat4f();
-	glUniformMatrix4fv(gl_.model_to_world_uniform, 1, GL_FALSE, identity.getPtr());
 	glBindVertexArray(gl_.static_vao);
 	glDrawArrays(GL_TRIANGLES, 0, SIZEOF_ARRAY(reference_plane_data));
 	
@@ -495,11 +501,17 @@ void App::render() {
 	rotationMat.setCol(1, Vec4f(rotation.getCol(1), 0));
 	rotationMat.setCol(2, Vec4f(rotation.getCol(2), 0));
 	rotationMat.setCol(3, Vec4f(0, 0, 0, 1));
-	Mat4f modelToWorld = translationMat * rotationMat * scaleMat;
+	M = translationMat * rotationMat * scaleMat;
+
+	MVP = P * V * M;
+	Mat4f temp(M);
+	//temp.invert(); temp.transpose();
+	normalMat = temp.getXYZ();
+	//normalMat = M.inverted().transposed().getXYZ();
 	
 	// Draw the model with your model-to-world transformation.
-	glUniformMatrix3fv(gl_.rotation_uniform, 1, GL_FALSE, rotation.getPtr());
-	glUniformMatrix4fv(gl_.model_to_world_uniform, 1, GL_FALSE, modelToWorld.getPtr());
+	glUniformMatrix4fv(gl_.mvp_uniform, 1, GL_FALSE, MVP.getPtr());
+	glUniformMatrix3fv(gl_.normal_matrix_uniform, 1, GL_FALSE, normalMat.getPtr());
 	glBindVertexArray(gl_.dynamic_vao);
 	glDrawArrays(GL_TRIANGLES, 0, vertices_.size());
 
@@ -512,10 +524,25 @@ void App::render() {
 	
 	// Show status messages. You may find it useful to show some debug information in a message.
 	common_ctrl_.message(sprintf("Use Home/End to rotate camera."), "instructions");
-	common_ctrl_.message(sprintf("Camera is at (%.2f %.2f %.2f) looking towards origin.",
-		-FW::sin(camera_rotation_angle_) * camera_distance, 0.0f,
-		-FW::cos(camera_rotation_angle_) * camera_distance), "camerainfo");
-	common_ctrl_.message(sprintf("rotQ_ length is %.6f",
+	Vec3f look = rotQ_.rotation().transposed() * Vec3f(0, 0, 1);
+	Mat3f r = rotQ_.rotation();
+	common_ctrl_.message(sprintf("Rotation [%.6f %.6f %.6f] [%.6f %.6f %.6f] [%.6f %.6f %.6f] Det(%.6f).",
+		r.getRow(0)[0], r.getRow(0)[1], r.getRow(0)[2],
+		r.getRow(1)[0], r.getRow(1)[1], r.getRow(1)[2],
+		r.getRow(2)[0], r.getRow(2)[1], r.getRow(2)[2],
+		r.det()),
+		"rotationinfo");
+	common_ctrl_.message(sprintf("Camera is at (%.2f %.2f %.2f) looking along (%.2f %.2f %.2f) N(%.6f).",
+		cameraPos_.x,
+		cameraPos_.y,
+		cameraPos_.z,
+		look.x,
+		look.y,
+		look.z,
+		look.x * look.x + look.y * look.y + look.z * look.z),
+		"camerainfo");
+	common_ctrl_.message(sprintf("rotQ_ (%.4f, %.4f, %.4f, %.4f) norm is %.6f",
+		rotQ_.w, rotQ_.x, rotQ_.y, rotQ_.z,
 		sqrt(rotQ_.w*rotQ_.w + rotQ_.x*rotQ_.x + rotQ_.y*rotQ_.y + rotQ_.z*rotQ_.z)), "quatinfo");
 }
 

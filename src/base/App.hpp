@@ -20,7 +20,7 @@ struct glGeneratedIndices
 	GLuint static_vao, dynamic_vao;
 	GLuint shader_program;
 	GLuint static_vertex_buffer, dynamic_vertex_buffer;
-	GLuint model_to_world_uniform, world_to_clip_uniform, shading_toggle_uniform, rotation_uniform;
+	GLuint shading_toggle_uniform, mvp_uniform, normal_matrix_uniform;
 };
 
 //http://www.cprogramming.com/tutorial/3d/quaternions.html
