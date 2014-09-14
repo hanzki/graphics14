@@ -26,6 +26,8 @@ using std::string;
 // do not need to be visible outside this file.
 namespace {
 
+	
+
 enum VertexShaderAttributeLocations {
 	ATTRIB_POSITION = 0,
 	ATTRIB_NORMAL = 1,
@@ -163,6 +165,36 @@ vector<Vertex> loadUserGeneratedModel() {
 
 }
 
+Quatf Quatf::operator* (const Quatf &q) const{
+	return Quatf(
+		w*q.w - x*q.x - y*q.y - z*q.z,
+		w*q.x + x*q.w + y*q.z - z*q.y,
+		w*q.y - x*q.z + y*q.w + z*q.x,
+		w*q.z + x*q.y - y*q.x + z*q.w);
+}
+Quatf::Quatf(const Vec3f &axis, float angle){
+	float angsin = sin(angle / 2), angcos = cos(angle / 2);
+	w = angcos;
+	x = axis.x * angsin;
+	y = axis.y * angsin;
+	z = axis.z * angsin;
+}
+Mat3f Quatf::rotation() const{
+	Mat3f mat;
+	mat.setRow(0, Vec3f(1 - 2 * y * y - 2 * z * z	, 2 * x * y - 2 * w * z		, 2 * x * z + 2 * w * y));
+	mat.setRow(1, Vec3f(2 * x * y + 2 * w * z		, 1 - 2 * x * x - 2 * z * z	, 2 * y * z + 2 * w * x));
+	mat.setRow(2, Vec3f(2 * x * z - 2 * w * y		, 2 * y * z - 2 * w * x		, 1 - 2 * x * x - 2 * y * y));
+	return mat;
+}
+Quatf& Quatf::normalize() {
+	float magnitude = sqrt(w*w + x*x + y*y + z*z);
+	w /= magnitude;
+	x /= magnitude;
+	y /= magnitude;
+	z /= magnitude;
+	return *this;
+}
+
 App::App(void)
 :   common_ctrl_			(CommonControls::Feature_Default & ~CommonControls::Feature_RepaintOnF5),
 	current_model_			(MODEL_EXAMPLE),
@@ -170,9 +202,9 @@ App::App(void)
 	shading_toggle_			(false),
 	shading_mode_changed_	(false),
 	camera_rotation_angle_	(0.0f),
-	translation_			(Vec3f(0.0f)),
 	scale_					(1.0f),
-	rotation_				(0.0f)
+	rotation_				(0.0f),
+	cameraPos_				(Vec3f(0,0,-2.0f))
 {
 	static_assert(std::is_standard_layout<Vertex>::value, "struct Vertex must be standard layout to use offsetof");
 	initRendering();
@@ -265,7 +297,28 @@ bool App::handleEvent(const Window::Event& ev) {
 			rotation_ -= 0.05 * FW_PI;
 		else if (ev.key == FW_KEY_SLASH)
 			rotation_ += 0.05 * FW_PI;
-
+		else if (ev.key == FW_KEY_Q)
+			rotQ_ = Quatf(Vec3f(0, 0, 1), -0.05 * FW_PI) * rotQ_;
+		else if (ev.key == FW_KEY_E)
+			rotQ_ = Quatf(Vec3f(0, 0, 1), 0.05 * FW_PI) * rotQ_;
+		else if (ev.key == FW_KEY_W)
+			rotQ_ = Quatf(Vec3f(1, 0, 0), -0.05 * FW_PI) * rotQ_;
+		else if (ev.key == FW_KEY_S)
+			rotQ_ = Quatf(Vec3f(1, 0, 0), 0.05 * FW_PI) * rotQ_;
+		else if (ev.key == FW_KEY_A)
+			rotQ_ = Quatf(Vec3f(0, 1, 0), -0.05 * FW_PI) * rotQ_;
+		else if (ev.key == FW_KEY_D)
+			rotQ_ = Quatf(Vec3f(0, 1, 0), 0.05 * FW_PI) * rotQ_;
+		else if (ev.key == FW_KEY_P)
+			rotQ_.normalize();
+		else if (ev.key == FW_KEY_Y)
+			cameraPos_ = cameraPos_ + rotQ_.rotation().getCol(2) * 0.1f;
+		else if (ev.key == FW_KEY_H)
+			cameraPos_ = cameraPos_ + rotQ_.rotation().getCol(2) * -0.1f;
+		else if (ev.key == FW_KEY_J)
+			cameraPos_ = cameraPos_ + rotQ_.rotation().getCol(0) * -0.1f;
+		else if (ev.key == FW_KEY_G)
+			cameraPos_ = cameraPos_ + rotQ_.rotation().getCol(0) * 0.1f;
 
 	}
 	
@@ -395,21 +448,29 @@ void App::render() {
 	// when it starts drawing them.
 
 	// Our camera is aimed at origin, and orbits around origin at fixed distance.
-	static const float camera_distance = 2.1f;	
+	static const float camera_distance = -2.1f;	
 	Mat4f C;
+	Quatf rotationQuat(Vec3f(0, 1, 0), -camera_rotation_angle_);
+#if 0
 	Mat3f rot = Mat3f::rotation(Vec3f(0, 1, 0), -camera_rotation_angle_);
+#else
+	Mat3f rot = rotQ_.rotation();
+#endif
 	C.setCol(0, Vec4f(rot.getCol(0), 0));
 	C.setCol(1, Vec4f(rot.getCol(1), 0));
 	C.setCol(2, Vec4f(rot.getCol(2), 0));
-	C.setCol(3, Vec4f(0, 0, camera_distance, 1));
+	C.setCol(3, Vec4f(0, 0, 0, 1));
+
+	C = C * Mat4f::translate(cameraPos_);
 	
 	// Simple perspective.
-	static const float fnear = 0.1f, ffar = 4.0f;
-	Mat4f P;
-	P.setCol(0, Vec4f(1, 0, 0, 0));
-	P.setCol(1, Vec4f(0, 1, 0, 0));
-	P.setCol(2, Vec4f(0, 0, (ffar+fnear)/(ffar-fnear), 1));
-	P.setCol(3, Vec4f(0, 0, -2*ffar*fnear/(ffar-fnear), 0));
+	Mat4f P = Mat4f::perspective(70, 0.1f, 4.0f);
+	//static const float fnear = 0.1f, ffar = 4.0f;
+	//Mat4f P;
+	//P.setCol(0, Vec4f(1, 0, 0, 0));
+	//P.setCol(1, Vec4f(0, 1, 0, 0));
+	//P.setCol(2, Vec4f(0, 0, (ffar+fnear)/(ffar-fnear), 1));
+	//P.setCol(3, Vec4f(0, 0, -2*ffar*fnear/(ffar-fnear), 0));
 
 	Mat4f world_to_clip = P * C;
 	
@@ -454,6 +515,8 @@ void App::render() {
 	common_ctrl_.message(sprintf("Camera is at (%.2f %.2f %.2f) looking towards origin.",
 		-FW::sin(camera_rotation_angle_) * camera_distance, 0.0f,
 		-FW::cos(camera_rotation_angle_) * camera_distance), "camerainfo");
+	common_ctrl_.message(sprintf("rotQ_ length is %.6f",
+		sqrt(rotQ_.w*rotQ_.w + rotQ_.x*rotQ_.x + rotQ_.y*rotQ_.y + rotQ_.z*rotQ_.z)), "quatinfo");
 }
 
 vector<Vertex> App::loadObjFileModel(string filename) {

@@ -23,6 +23,28 @@ struct glGeneratedIndices
 	GLuint model_to_world_uniform, world_to_clip_uniform, shading_toggle_uniform, rotation_uniform;
 };
 
+//http://www.cprogramming.com/tutorial/3d/quaternions.html
+class Quatf {
+public:
+	float w;
+	float x;
+	float y;
+	float z;
+
+	Quatf() : w(1.0f), x(0.0f), y(0.0f), z(0.0f) {}
+	Quatf(float w, float x, float y, float z) : w(w), x(x), y(y), z(z){}
+	Quatf(const Vec3f &axis, float angle);
+
+	static Quatf local(const Vec3f &axis, float angle);
+
+	Quatf operator* (const Quatf &q) const;
+
+	Mat3f rotation() const;
+
+	Quatf& normalize();
+
+};
+
 class App : public Window::Listener
 {
 private:
@@ -67,6 +89,9 @@ private:
 	Vec3f				translation_;
 	float				scale_;
 	float				rotation_;
+
+	Quatf				rotQ_;
+	Vec3f				cameraPos_;
 
 	// EXTRA:
 	// For animation extra credit you can use the framework's Timer class.
