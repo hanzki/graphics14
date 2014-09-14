@@ -190,6 +190,17 @@ Mat3f Quatf::rotation() const{
 	mat.setRow(2, Vec3f(2 * xz - 2 * wy		, 2 * yz + 2 * wx	, ww - xx - yy + zz));
 	return mat;
 }
+
+Vec3f Quatf::getUp() const {
+	return Vec3f(2 * x*y - 2 * w*z, w*w - x*x + y*y - z*z, 2 * y*z + 2 * w*x);
+}
+Vec3f Quatf::getLeft() const {
+	return Vec3f(w*w + x*x - y*y - z*z, 2 * x*y + 2 * w*z, 2 * x*z - 2 * w*y);
+}
+Vec3f Quatf::getLook() const {
+	return Vec3f(2 * x*z + 2 * w*y, 2 * y*z - 2 * w*x, w*w - x*x - y*y + z*z);
+}
+
 Quatf& Quatf::normalize() {
 	float magnitude = sqrt(w*w + x*x + y*y + z*z);
 	w /= magnitude;
@@ -335,6 +346,11 @@ bool App::handleEvent(const Window::Event& ev) {
 		// Event::mouseDragging tells whether some mouse buttons are currently down.
 		// If you want to know which ones, you have to keep track of the button down/up events
 		// (e.g. FW_KEY_MOUSE_LEFT).
+		if (ev.mouseDragging){
+			rotQ_ = rotQ_ * Quatf(rotQ_.getLeft(), ev.mouseDelta.y / 100.0f * FW_PI) * Quatf(rotQ_.getUp(), ev.mouseDelta.x / 100.0f * FW_PI);
+			//rotQ_ = rotQ_ * Quatf(Vec3f(0, 1, 0), ev.mouseDelta.x / 100.0f * FW_PI);
+		}
+		
 	}
 
 	if (ev.type == Window::EventType_Close) {
@@ -470,6 +486,7 @@ void App::render() {
 
 	V = V * Mat4f::translate(cameraPos_);
 	
+	
 	// Simple perspective.
 	P = Mat4f::perspective(70, 0.1f, 4.0f);
 	//static const float fnear = 0.1f, ffar = 4.0f;
@@ -526,12 +543,16 @@ void App::render() {
 	common_ctrl_.message(sprintf("Use Home/End to rotate camera."), "instructions");
 	Vec3f look = rotQ_.rotation().transposed() * Vec3f(0, 0, 1);
 	Mat3f r = rotQ_.rotation();
-	common_ctrl_.message(sprintf("Rotation [%.6f %.6f %.6f] [%.6f %.6f %.6f] [%.6f %.6f %.6f] Det(%.6f).",
-		r.getRow(0)[0], r.getRow(0)[1], r.getRow(0)[2],
-		r.getRow(1)[0], r.getRow(1)[1], r.getRow(1)[2],
-		r.getRow(2)[0], r.getRow(2)[1], r.getRow(2)[2],
-		r.det()),
-		"rotationinfo");
+	//common_ctrl_.message(sprintf("Rotation [%.6f %.6f %.6f] [%.6f %.6f %.6f] [%.6f %.6f %.6f] Det(%.6f).",
+	//	r.getRow(0)[0], r.getRow(0)[1], r.getRow(0)[2],
+	//	r.getRow(1)[0], r.getRow(1)[1], r.getRow(1)[2],
+	//	r.getRow(2)[0], r.getRow(2)[1], r.getRow(2)[2],
+	//	r.det()),
+	//	"rotationinfo");
+	common_ctrl_.message(sprintf("Camera Up(%.2f %.2f %.2f) Right(%.2f %.2f %.2f) Look(%.2f %.2f %.2f)",
+		rotQ_.getUp().x, rotQ_.getUp().y, rotQ_.getUp().z,
+		rotQ_.getLeft().x, rotQ_.getLeft().y, rotQ_.getLeft().z,
+		rotQ_.getLook().x, rotQ_.getLook().y, rotQ_.getLook().z), "cameraaxis");
 	common_ctrl_.message(sprintf("Camera is at (%.2f %.2f %.2f) looking along (%.2f %.2f %.2f) N(%.6f).",
 		cameraPos_.x,
 		cameraPos_.y,

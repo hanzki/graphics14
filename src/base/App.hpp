@@ -35,6 +35,10 @@ public:
 	Quatf(float w, float x, float y, float z) : w(w), x(x), y(y), z(z){}
 	Quatf(const Vec3f &axis, float angle);
 
+	Vec3f getUp() const;
+	Vec3f getLeft() const;
+	Vec3f getLook() const;
+
 	static Quatf local(const Vec3f &axis, float angle);
 
 	Quatf operator* (const Quatf &q) const;
